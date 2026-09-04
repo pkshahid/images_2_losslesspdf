@@ -13,6 +13,11 @@ and [grammy](https://grammy.dev/).
   re-encoding (q90 / q70 / q50) and trade file size for fidelity. PNGs
   are always embedded lossless. The resulting PDF size is shown next to
   the download link.
+- **Resume.io → PDF**: paste a resume.io share link
+  (`https://resume.io/r/<id>`) in the web UI or send it to the Telegram
+  bot to download the resume as a PDF. Each resume page is fetched via
+  resume.io's public rendering service (`ssr.resume.tools`) as a PNG and
+  embedded lossless.
 - **Telegram bot**: send images to the bot (as photos or files), then run
   `/convert` to get the PDF back as a document.
 - Supports **JPEG** and **PNG** (pdfkit's native formats).
@@ -61,6 +66,10 @@ Open [http://localhost:3000](http://localhost:3000) for the web UI.
 - `/quality high|medium|low` — set the default output quality for this
   chat (default: `high`).
 - `/clear` — discard the images collected in this chat.
+- `/resume <url> [high|medium|low]` — download a resume.io share link
+  (`https://resume.io/r/<id>`) as a PDF. You can also just send the link
+  directly (no command needed); the bot detects resume.io URLs in plain
+  text messages.
 - `/help` — show usage.
 
 ### Notes & limitations
@@ -75,6 +84,11 @@ Open [http://localhost:3000](http://localhost:3000) for the web UI.
   the background. On platforms that freeze the runtime after the response
   is sent (some serverless providers), long conversions may be cut short —
   in that case prefer the web UI for large batches.
+- **Resume.io downloads** rely on resume.io's public rendering service
+  (`ssr.resume.tools`) and only work with publicly shared resumes (the
+  `/r/<id>` share link). Private resumes, or resumes whose share link has
+  been revoked, will fail. The rendering service may impose its own
+  rate limits or resolution caps.
 
 ## Project structure
 
@@ -83,14 +97,17 @@ src/
   app/
     api/
       convert/route.ts            # POST multipart -> PDF (web UI)
+      resumeio/route.ts           # POST JSON {url} -> resume.io PDF
       telegram/webhook/route.ts   # Telegram update receiver
       telegram/setup/route.ts     # one-shot webhook registration
     layout.tsx
     page.tsx                      # web UI page
   components/
     ImageToPdf.tsx                # drag-drop + reorder + convert client UI
+    ResumeIoDownloader.tsx        # resume.io URL -> PDF client UI
   lib/
     pdf.ts                        # imagesToPdf() using pdfkit
+    resumeio.ts                   # resume.io share-link -> PDF
     telegram.ts                   # Telegram API helpers (sendMessage, etc.)
     bot-handler.ts                # per-chat session + update handling
 ```

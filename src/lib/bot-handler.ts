@@ -7,6 +7,11 @@ import {
   type Quality,
 } from "./pdf";
 import {
+  downloadResumeIoPdf,
+  isResumeIoUrl,
+  parseResumeIoSecureId,
+} from "./resumeio";
+import {
   downloadTelegramFile,
   sendMessage,
   sendDocument,
@@ -53,7 +58,10 @@ const HELP_TEXT = [
   "/convert \\[high|medium|low] — build the PDF from the images sent so far",
   "/quality high|medium|low — set output quality (default: high)",
   "/clear — discard the images collected in this chat",
+  "/resume <url> — download a resume.io share link as a PDF",
   "/help — show this help",
+  "",
+  "You can also just send a resume.io share link (https://resume.io/r/…) directly — no command needed.",
   "",
   "Quality controls JPEG re-encoding (q90/q70/q50) to trade file size for fidelity. PNGs are always embedded lossless.",
 ].join("\n");
@@ -114,6 +122,35 @@ export async function handleTelegramUpdate(update: {
       return;
     }
     await convertAndSend(chatId, override ?? undefined);
+    return;
+  }
+
+  // /resume <url> [quality]
+  if (msg.text && /^\/resume(\s|$)/i.test(msg.text)) {
+    const parts = msg.text.trim().split(/\s+/).slice(1);
+    if (parts.length === 0) {
+      await sendMessage(
+        chatId,
+        "Usage: /resume <https://resume.io/r/...> [high|medium|low]",
+      );
+      return;
+    }
+    const url = parts[0];
+    const qualityOverride = parseQuality(parts[1] ?? null);
+    if (parts[1] && !qualityOverride) {
+      await sendMessage(
+        chatId,
+        "Usage: /resume <https://resume.io/r/...> [high|medium|low]",
+      );
+      return;
+    }
+    await resumeIoAndSend(chatId, url, qualityOverride ?? undefined);
+    return;
+  }
+
+  // Bare resume.io share link sent as a text message.
+  if (msg.text && isResumeIoUrl(msg.text.trim())) {
+    await resumeIoAndSend(chatId, msg.text.trim());
     return;
   }
 
@@ -201,5 +238,42 @@ async function convertAndSend(
     sessions.delete(chatId);
   } catch (err) {
     await sendMessage(chatId, `⚠️ Conversion failed: ${String(err)}`);
+  }
+}
+
+/**
+ * Download a resume.io resume (by share URL or bare secureId) and send it
+ * back as a PDF document. Uses the chat's quality setting unless an
+ * override is supplied.
+ */
+async function resumeIoAndSend(
+  chatId: number,
+  input: string,
+  qualityOverride?: Quality,
+): Promise<void> {
+  const secureId = parseResumeIoSecureId(input);
+  if (!secureId) {
+    await sendMessage(
+      chatId,
+      "⚠️ That doesn't look like a resume.io share link. Expected https://resume.io/r/<id>.",
+    );
+    return;
+  }
+  const quality = qualityOverride ?? getSession(chatId).quality;
+  await sendMessage(
+    chatId,
+    `⏳ Fetching resume.io resume \`${secureId}\` (quality: ${quality})…`,
+  );
+  try {
+    const { pdf, pageCount } = await downloadResumeIoPdf(input, quality);
+    const sizeKb = (pdf.length / 1024).toFixed(0);
+    await sendDocument(
+      chatId,
+      pdf,
+      `resume_${secureId}.pdf`,
+      `Resume.io · ${pageCount} page(s) · ${quality} quality · ${sizeKb} KB`,
+    );
+  } catch (err) {
+    await sendMessage(chatId, `⚠️ Resume download failed: ${String(err)}`);
   }
 }

@@ -45,5 +45,9 @@ images to a single PDF via a web UI and a Telegram bot (webhook).
   paths share one implementation, including the `Quality` preset.
 - Quality (`high` | `medium` | `low`) re-encodes JPEGs via sharp; PNGs
   are always embedded lossless. `parseQuality()` validates input.
+- Resume.io → PDF lives in `src/lib/resumeio.ts`: it fetches page metadata
+  + rendered PNGs from `ssr.resume.tools` and feeds them through
+  `imagesToPdf`, so the web (`/api/resumeio`) and bot (`/resume` command
+  + bare-URL detection) paths share one implementation.
 - Per-chat bot state is in-memory (`src/lib/bot-handler.ts`); swap for a
   shared store if scaling horizontally.
